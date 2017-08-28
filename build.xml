@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="AmrCommon" basedir="." default="package-common">
+	<!-- import properties (app settings, classpath, jar file locations) -->
+	<property file="build.properties"/>
+	
+	<target name="prepare">
+		<echo message="====== start build  ========"/>
+		<property name="src.dir" value="${basedir}/src" />
+		<property name="build.dir" value="${basedir}/build" />
+		<!--jar包路径 -->
+		<path id="compile.classpath">
+			<fileset dir="${tomcat.lib.path}">
+				<include name="*.jar"/>
+			</fileset>
+			<fileset dir="${lib.path}">
+				<include name="*.jar"/>
+			</fileset>
+		</path>
+	</target>
+	
+	<target name="compile" description="Compile common" depends="prepare">
+		<mkdir dir="${build.dir}"/>
+		<javac destdir="${build.dir}" encoding="UTF-8" debug="true">
+			<src path="${src.dir}"/>
+			<classpath refid="compile.classpath"/>
+		</javac>
+		<copy todir="${build.dir}">
+			<fileset dir="${src.dir}/util"/>
+		</copy>
+		<copy todir="${build.dir}">
+			<fileset dir="${src.dir}/web"/>
+		</copy>
+		<copy todir="${build.dir}">
+			<fileset dir="${src.dir}/dao"/>
+		</copy>
+		<copy todir="${build.dir}">
+			<fileset dir="${src.dir}/service"/>
+		</copy>
+	</target>
+	
+	<target name="package-common" depends="compile" description="Package common module">
+		<jar destfile="${lib.path}/${webapp.name}-common-${webapp.version}.jar">
+			<fileset dir="${build.dir}">
+				<include name="**/*.xml" />
+                <include name="**/*.ttf" />
+				<include name="**/*.class" />
+				<include name="**/*.properties" />
+			</fileset>
+		</jar>
+		<delete dir="${build.dir}"/>
+	</target>
+</project>

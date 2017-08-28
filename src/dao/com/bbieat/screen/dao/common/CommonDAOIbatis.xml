@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+<!DOCTYPE sqlMap      
+	PUBLIC "-//ibatis.apache.org//DTD SQL Map 2.0//EN"      
+	"http://ibatis.apache.org/dtd/sql-map-2.dtd">
+
+<sqlMap namespace="common">
+	
+	 <!-- 分页用 前面sel -->
+	<sql id="pagingTop">
+		<dynamic> 
+			<!--是否导出Excel -->
+			<isNotEqual property="isExcel" compareValue="online">
+				<isEqual property="count"  compareValue="true">
+					SELECT COUNT(*) AS CNT FROM (
+				</isEqual>
+				<isNotEqual property="count"  compareValue="true">
+					SELECT A.* FROM ( SELECT B.*, ROWNUM AS ST FROM (
+				</isNotEqual>
+			</isNotEqual>
+		</dynamic>
+	</sql>
+	
+	<!-- 分页用 后面sel -->
+	<sql id="pagingBottom">
+		<dynamic>
+			<isNotEqual property="isExcel" compareValue="online">
+				<isEqual property="count"  compareValue="true">
+					) A
+				</isEqual>
+				<isNotEqual property="count"  compareValue="true">
+					<isNotEmpty property="start">
+						<!-- 排序sel -->
+						 <isNotEmpty property="sort">
+							ORDER BY $sort$
+							<isNotEmpty property="dir">
+							   $dir$
+							</isNotEmpty>
+						</isNotEmpty>
+						 )B ) A WHERE A.ST &gt; #start# and A.ST &lt;= #end#
+					</isNotEmpty>
+					
+				</isNotEqual>
+			</isNotEqual>	
+		</dynamic>
+	</sql>
+		<!-- 查询页面，数据量大时取前500条数据 -->
+	<sql id="queryTop">
+		<dynamic>
+			<isEmpty property="isExcel"> <!--是否导出Excel -->
+				SELECT T.* FROM (
+			</isEmpty>
+		</dynamic>
+	</sql>
+	
+	<!-- 查询页面，数据量大时取前1000条数据 -->
+	<sql id="queryBottom">
+		<dynamic>
+			<isEmpty property="isExcel"> <!--是否导出Excel -->
+				)T WHERE T.ST &lt;= #maxsize#
+			</isEmpty>
+		</dynamic>
+	</sql>
+	 <!-- 取数据字典 -->
+	 <select id="getPCode" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+	 	SELECT VALUE BM, NAME MC FROM P_CODE T WHERE CODE_TYPE = #code_type# 
+	 	<isNotEmpty property="content1">
+	 		AND CONTENT1 = #content1#
+	 	</isNotEmpty>
+	 	ORDER BY BM
+	 </select>
+	 
+	 <!-- 获取系统配置 -->
+	 <select id="getPSys" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+		 SELECT DEFAULT_VALUE BM, NAME MC FROM P_SYSPARA 
+		 WHERE 1=1
+		 <isNotEmpty property="sortId">
+		    AND PARA_SORT_ID = #sortId#
+		 </isNotEmpty>
+		 <isNotEmpty property="name">
+	 		AND NAME = #name#
+	 	</isNotEmpty>
+	 </select>
+	 
+	  <!-- 获取管理方式 -->
+	 <select id="getGlfs" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+		 SELECT VALUE BM, NAME MC FROM VW_CODE_GLFS 
+	 </select>
+	 
+	  <!-- 获取通讯方式 -->
+	 <select id="getTxfs" parameterClass="java.util.HashMap" resultClass="java.util.HashMap">
+		 SELECT VALUE BM, NAME MC FROM VW_CODE_TXFS 
+	 </select>
+	 
+	<!-- 操作员访问数据权限 -->
+	<sql id="fwdwFilter">
+		<isNotEmpty property="CURR_STAFFID">
+	 		AND EXISTS (SELECT 1 FROM VW_CZY_SJFWDW QX WHERE QX.CZYID = #CURR_STAFFID# AND YH.DWDM = QX.SJFWDW)
+	 	</isNotEmpty>
+ 	</sql>
+ 	
+ 	<!-- 流程环节权限 -->
+ 	<sql id="workFilter">
+ 		<!-- LC 代表 PROC_CURRENT -->
+ 		<!-- 待领取工单权限 -->
+ 		<isEqual property="wait"  compareValue="true">
+		 		AND EXISTS (SELECT 1
+	          FROM VW_AQCZY A, ORGAN_PRIVS B, VW_GWHJGX VW
+	         WHERE A.JGID = B.ORGAN_ID
+	           AND B.UNIT_CODE = LC.ORG_NO
+	           AND A.CZYID = VW.OPER_ID
+	           AND A.CZYID = #CURR_STAFFID#
+	           AND LC.PROC_CODE = #pcode#
+	           AND LC.LINK_CODE_CUR= #lcode#
+	           AND LC.PROC_STATUS = '1'
+	           AND LC.RECEIVER_NO_CUR IS NULL
+	           AND VW.PROC_CODE = LC.PROC_CODE
+	           AND VW.LINK_CODE = LC.LINK_CODE_CUR
+	           )
+ 	    </isEqual>
+ 	    
+ 	    <!-- 其他环节工单权限 -->
+ 	    <isEqual property="wait"  compareValue="false">
+ 	           AND LC.PROC_STATUS = '1'
+ 	           AND LC.PROC_CODE = #pcode#
+ 	           AND LC.LINK_CODE_CUR = #lcode#	
+ 	           AND LC.RECEIVER_NO_CUR = #CURR_STAFFID#		
+	 	 </isEqual>
+	 	 
+	 	 <!-- 疑难待确认\升级工单权限则根据登录单位的取工单 -->
+	 	 <isEqual property="wait"  compareValue="other">
+	 	       AND LC.PROC_STATUS = '1'
+	           AND LC.PROC_CODE = #pcode#
+	           AND LC.LINK_CODE_CUR = #lcode#
+	           <isEqual property="like"  compareValue="false">
+	          	     AND LC.ORG_NO = #UNITCODE#
+	           </isEqual>
+	           <isEqual property="like"  compareValue="true">
+	          		 AND LC.ORG_NO LIKE #UNITCODE# || '%'
+	           </isEqual>
+	           AND EXISTS (SELECT 1 FROM VW_GWHJGX VW 
+	           WHERE VW.OPER_ID = #CURR_STAFFID# 
+	           AND VW.PROC_CODE = LC.PROC_CODE
+	           AND VW.LINK_CODE = LC.LINK_CODE_CUR)
+	 	 </isEqual>
+ 	</sql>
+ 	
+ 	<!-- 操作员访问厂家权限 -->
+ 	<sql id="fwcjFilter"> 	
+	 	<isNotEmpty property="CURR_FWCJ"> 
+		     AND ZD.ZZCJBM
+			<iterate prepend="IN" open="(" close=")" property="CURR_FWCJ" conjunction=",">
+				#CURR_FWCJ[]#
+			</iterate>
+	 	</isNotEmpty>
+	</sql>
+	 
+	<!-- 统计权限控制 -->
+	<sql id="statFilter">
+		<isNotEmpty prepend="AND" property="statDwdm">
+	 		DW.DWDM LIKE #statDwdm# || '%'
+	 	</isNotEmpty>
+	 	<isNotEmpty prepend="AND" property="statJb">
+	 		DW.TJJB 
+			<iterate prepend="IN" open="(" close=")" property="statJb" conjunction=",">
+				#statJb[]#
+			</iterate>
+	 	</isNotEmpty>
+	 	<isNotEmpty property="CURR_STAFFID">
+	 		AND EXISTS (SELECT 1 FROM VW_CZY_SJFWDW QX WHERE QX.CZYID = #CURR_STAFFID# AND DW.DWDM = QX.SJFWDW)
+	 	</isNotEmpty>
+	</sql>
+	
+    <!-- 报表权限控制 -->
+    <sql id="reportFilter">
+        <isNotEmpty prepend="AND" property="reportDwdm">
+            DW.DWDM LIKE #reportDwdm# || '%'
+        </isNotEmpty>
+        <isNotEmpty prepend="AND" property="reportJb">
+            DW.TJJB 
+            <iterate prepend="IN" open="(" close=")" property="reportJb" conjunction=",">
+                #reportJb[]#
+            </iterate>
+        </isNotEmpty>
+        <isNotEmpty property="CURR_STAFFID">
+            AND EXISTS (SELECT 1 FROM VW_CZY_SJFWDW QX WHERE QX.CZYID = #CURR_STAFFID# AND DW.DWDM = QX.SJFWDW)
+        </isNotEmpty>
+    </sql>
+
+	<!-- 查询节点权限控制 -->
+	<sql id="queryFilter">
+		<dynamic>
+		     <include refid='common.fwdwFilter'/>
+		     <include refid='common.fwcjFilter'/>
+		     
+			 <!-- 单位-->
+			 <isEqual property="nodeType" compareValue="20">
+			 	 AND EXISTS (SELECT 1 FROM VW_DWDM_MX VW WHERE YH.DWDM = VW.DWDM AND VW.DSDWDM LIKE #nodeId# || '%')
+			 </isEqual>
+			 <isEqual property="nodeType" compareValue="30">
+			 	 AND EXISTS (SELECT 1 FROM VW_DWDM_MX VW WHERE YH.DWDM = VW.DWDM AND VW.DSDWDM LIKE #nodeId# || '%')
+			 </isEqual>
+			 <isEqual property="nodeType" compareValue="31">
+			 	 AND EXISTS (SELECT 1 FROM VW_DWDM_MX VW WHERE YH.DWDM = VW.DWDM AND VW.DSDWDM = #nodeId#)
+			 </isEqual>
+			 <isEqual property="nodeType" compareValue="40">
+			 	 AND EXISTS (SELECT 1 FROM VW_DWDM_MX VW WHERE YH.DWDM = VW.DWDM AND VW.DSDWDM = #nodeId#)
+			 </isEqual>
+			 <isEqual property="nodeType" compareValue="41">
+			 	 AND EXISTS (SELECT 1 FROM VW_DWDM_MX VW WHERE YH.DWDM = VW.DWDM AND VW.DSDWDM = #nodeId#)
+			 </isEqual>
+			 
+			 <!-- 线路-->
+			 <isEqual property="nodeType" compareValue="xl">
+			 	<isNotEqual property="yhlx" compareValue="03">
+			 		AND YH.GDXLID = #nodeId#
+			 	</isNotEqual>
+				<isEqual property="yhlx" compareValue="03">
+					AND BJ.GDXLID = #nodeId#
+			 	</isEqual>
+				<isNotEmpty property="nodeDwdm">
+			 		AND EXISTS (SELECT 1 FROM VW_DWDM_MX VW WHERE YH.DWDM = VW.DWDM AND VW.DSDWDM = #nodeDwdm#)
+			 	</isNotEmpty>
+			</isEqual>
+			 
+			 <!-- 台区-->
+			 <isEqual property="nodeType" compareValue="tq">
+				<isNotEqual property="yhlx" compareValue="03">
+			 		AND YH.TQID = #nodeId#
+			 	</isNotEqual>
+				<isEqual property="yhlx" compareValue="03">
+					AND BJ.TQID = #nodeId#
+			 	</isEqual>
+			 	<isNotEmpty property="nodeDwdm">
+			 		AND EXISTS (SELECT 1 FROM VW_DWDM_MX VW WHERE YH.DWDM = VW.DWDM AND VW.DSDWDM = #nodeDwdm#)
+			 	</isNotEmpty>
+			</isEqual>
+			
+			<!-- 设备 -->
+			<isEqual property="nodeType" compareValue="sb"> 
+				AND ZD.ZDJH = #nodeId#
+			</isEqual>
+			
+			<!-- 无通讯采集器 -->
+			<isEqual property="nodeType" compareValue="cjq"> 
+				 AND CLD.CJQJH = #nodeId#
+			</isEqual>
+			
+			<!-- 居民 -->
+			<isEqual property="nodeType" compareValue="jm"> 
+				 AND BJ.BJJH = #nodeId#
+			</isEqual>
+			
+			<!-- 行业 -->
+			<isEqual property="nodeType" compareValue="hy">
+			 	AND YH.HYID = #nodeId#
+			</isEqual> 
+			 
+			 <!-- 群组 -->
+			<isEqual property="nodeType" compareValue="qz">
+				<isNotEqual property="qzfl" compareValue="04">
+					AND EXISTS (SELECT 1 FROM QZ_YHZC QZ WHERE ZD.ZDJH = QZ.ZDJH AND QZID = #nodeId# )
+				</isNotEqual>
+				<isEqual property="qzfl" compareValue="04">
+		 		 	AND EXISTS (SELECT 1 FROM QZ_YHZC QZ WHERE QZ.ZDJH = BJ.BJJH AND QZID = #nodeId# )
+		 		</isEqual>
+			</isEqual>
+			
+			<!-- 临时结果集 -用户 -->
+			<isEqual property="nodeType" compareValue="resultSet01">
+			 	AND EXISTS (SELECT 1 FROM TEMP_LEFT_RESULT WHERE PCID=#nodeId# and TYPE='01' and VALUE=YH.HH)
+			</isEqual> 
+			<!-- 临时结果集 -终端 -->
+			<isEqual property="nodeType" compareValue="resultSet02">
+			 	AND EXISTS (SELECT 1 FROM TEMP_LEFT_RESULT WHERE PCID=#nodeId# and TYPE='02' and VALUE=ZD.ZDJH)
+			</isEqual> 
+		</dynamic>	 
+	</sql>
+	
+	<!--操作日志 -->
+	<insert id="insLogger" parameterClass="java.util.HashMap">
+		INSERT INTO RZ_CZZD
+		  (RZID, CZYID, DWDM, CZSJ, ZDJH, RZNRH, IP, CDBM, CZFL)
+		VALUES
+		  (S_RZ_CZZD.NEXTVAL, #CURR_STAFFID#, #UNIT_CODE#, SYSDATE, #zdjh#, #rznr#, #CURR_STAFF_IP#, #menuId#, #czfl#)
+	</insert>
+	
+	<!--操作日志 -->
+	<insert id="insLoggerForClient" parameterClass="java.util.HashMap">
+		insert into RZ_CZZD(RZID, CZYID, DWDM, CZSJ, ZDJH, RZNRH, IP, CZSJX, CZFL,CZLX)
+		values(S_RZ_CZZD.NEXTVAL,#CURR_STAFFID#,#UNIT_CODE#,sysdate,#zdjh#,#rznr#,#ip#,#sjx#,'02',#czlx#)
+	</insert>
+	
+	<sql id="works">
+		(
+		<!-- 正常流程待领取环节 -->
+        SELECT LC.PROC_CODE, LC.LINK_CODE_CUR, COUNT(LC.APP_NO) AS CNT
+          FROM VW_AQCZY     A,
+                ORGAN_PRIVS  B,
+                PROC_CURRENT LC,
+                PROC_DEFINE  DY,
+                VW_GWHJGX    GX
+         WHERE A.JGID = B.ORGAN_ID
+           AND B.UNIT_CODE = LC.ORG_NO
+           AND A.CZYID = #CURR_STAFFID#
+           AND A.CZYID = GX.OPER_ID
+           AND GX.PROC_CODE = LC.PROC_CODE
+           AND GX.LINK_CODE = LC.LINK_CODE_CUR
+           AND LC.PROC_STATUS = 1
+           AND LC.RECEIVER_NO_CUR IS NULL
+           AND LC.PROC_CODE = DY.PROC_CODE
+           AND DY.PROC_COMMENT = 0
+         GROUP BY LC.PROC_CODE, LC.LINK_CODE_CUR
+        
+        <!--  正常流程其他环节\疑难其他环节 -->
+        UNION ALL
+        
+        SELECT LC.PROC_CODE, LC.LINK_CODE_CUR, COUNT(LC.APP_NO) AS CNT
+          FROM PROC_CURRENT LC,  PROC_DEFINE DY, VW_GWHJGX GX
+         WHERE LC.RECEIVER_NO_CUR = #CURR_STAFFID#
+           AND LC.PROC_STATUS = 1
+           AND GX.PROC_CODE = LC.PROC_CODE
+   		   AND GX.LINK_CODE = LC.LINK_CODE_CUR
+           AND LC.RECEIVER_NO_CUR = GX.OPER_ID
+           AND LC.PROC_CODE = DY.PROC_CODE  
+           AND DY.PROC_COMMENT &lt; 2 
+         GROUP BY LC.PROC_CODE, LC.LINK_CODE_CUR
+         
+        <!--   疑难问题待确认环节 核查督办的待下发环节 --> 
+        UNION ALL
+        
+        SELECT LC.PROC_CODE, LC.LINK_CODE_CUR, COUNT(LC.APP_NO) AS CNT
+          FROM PROC_CURRENT LC,  VW_GWHJGX GX, PROC_DEFINE P	
+         WHERE LC.ORG_NO = #UNITCODE#
+           AND LC.PROC_STATUS = 1         
+           AND GX.OPER_ID = #CURR_STAFFID#
+           AND GX.PROC_CODE = LC.PROC_CODE
+           AND GX.LINK_CODE = LC.LINK_CODE_CUR
+           AND LC.PROC_CODE = P.PROC_CODE 
+           AND P.PROC_COMMENT = 1
+           AND LC.RECEIVER_NO_CUR IS NULL
+         GROUP BY LC.PROC_CODE, LC.LINK_CODE_CUR 
+         
+         <!--   升级的所有环节 --> 
+        UNION ALL
+        
+         SELECT LC.PROC_CODE, LC.LINK_CODE_CUR, COUNT(LC.APP_NO) AS CNT
+          FROM PROC_CURRENT LC, VW_GWHJGX GX
+         WHERE LC.PROC_STATUS = 1  
+             <isNotEqual property="UNITCODE"  compareValue="33101">
+    		 	AND LC.ORG_NO LIKE #UNITCODE# || '%'
+    		 </isNotEqual> 
+           AND GX.OPER_ID = #CURR_STAFFID#
+           AND GX.PROC_CODE = LC.PROC_CODE
+           AND GX.LINK_CODE = LC.LINK_CODE_CUR
+           AND LC.PROC_CODE = 'BM10_06'
+           AND EXISTS (
+           		SELECT 1 FROM JOB_OPER JOB, TERMINAL_JOB_LINK PL, TERMINAL_OPERATION  A
+           		   WHERE GX.OPER_ID = JOB.OPER_ID
+		           AND JOB.JOB_ID = PL.JOB_ID
+		           AND A.AMOUNT_TYPE = PL.AMOUNT_TYPE
+		           AND A.APP_NO = LC.APP_NO
+		           AND LC.LINK_CODE_CUR = PL.LINK_CODE
+		           AND PL.TYPE='01'
+           )
+            AND EXISTS (
+           		SELECT 1 FROM JOB_OPER JOB, TERMINAL_JOB_LINK PL, TERMINAL_OPERATION  A
+           		   WHERE GX.OPER_ID = JOB.OPER_ID
+		           AND JOB.JOB_ID = PL.JOB_ID
+		           AND A.VER_TYPE = PL.VER_TYPE
+		           AND A.APP_NO = LC.APP_NO
+		           AND LC.LINK_CODE_CUR = PL.LINK_CODE
+		           AND PL.TYPE='02'
+           )
+           GROUP BY LC.PROC_CODE, LC.LINK_CODE_CUR
+         ) TJ
+	
+	</sql>
+	
+	<!-- 省公司管理员 -->
+	<select id="isSuper" parameterClass="java.lang.String" resultClass="java.util.HashMap" >
+		SELECT CZY.CZYID
+		  FROM VW_AQCZY CZY, AQ_CZYJS_NEW JS
+		 WHERE CZY.CZYID = JS.CZYID
+		   AND JS.JSID = '1000'
+		   AND CZY.CZYID = #CURR_STAFFID#
+	</select>
+</sqlMap>
